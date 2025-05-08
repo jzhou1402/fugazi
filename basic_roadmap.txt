@@ -1,0 +1,13 @@
+📌 Phase 1: High-Value Alerts (build these first)
+	•	Price-based alert system (already started)
+	•	Price drop → LLM “Why did this happen?”
+	•	Earnings upcoming alert
+
+📌 Phase 2: Add Context
+	•	LLM-generated news summaries + sentiment snapshots
+	•	Daily pre/post-market movers for your watchlist
+
+📌 Phase 3: Smart Analyst Features
+	•	Thesis tracker + flagging violations
+	•	Options activity scanner (if API available)
+	•	Sentiment divergence detector

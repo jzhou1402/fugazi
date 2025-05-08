@@ -1,0 +1,28 @@
+name: Intraday Dip Detector
+
+on:
+  schedule:
+    # 30‑min runs between 9:30 AM and 4 PM EDT (13:30–20:00 UTC) Mon–Fri
+    - cron:  '30 13-19 * * 1-5'  # :30 past each hour from 13:30 → 19:30 UTC
+    - cron:  '0  14-20 * * 1-5'  # top of each hour from 14:00 → 20:00 UTC
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install yfinance requests numpy
+
+      - name: Run intraday dip detector
+        env:
+          PUSHOVER_USER:   ${{ secrets.PUSHOVER_USER }}
+          PUSHOVER_TOKEN:  ${{ secrets.PUSHOVER_TOKEN }}
+        run: python price_alert_bot.py

@@ -1,0 +1,26 @@
++---------------------+
+|  Your Stock List    | ← CSV / Google Sheets / JSON
++---------------------+
+          |
+          v
++---------------------+
+|  Price Tracker Bot  | ← Python script with scheduler
+| - Pulls latest price|
+| - Compares to rules |
++---------------------+
+          |
+  Significant Change?
+          |
+         Yes
+          |
+          v
++----------------------+
+| Notification Sender  |
+| (Pushover / IFTTT /  |
+|  Twilio / Firebase)  |
++----------------------+
+          |
+          v
++----------------------+
+|  Your Phone 📱       |
++----------------------+

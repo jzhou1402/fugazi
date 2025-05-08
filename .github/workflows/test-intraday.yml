@@ -28,4 +28,5 @@ jobs:
           PUSHOVER_USER:  ${{ secrets.PUSHOVER_USER }}
           PUSHOVER_TOKEN: ${{ secrets.PUSHOVER_TOKEN }}
           TEST_TICKERS:   ${{ github.event.inputs.test_tickers }}
+        run: echo "PUSHOVER_USER=$PUSHOVER_USER" && echo "PUSHOVER_TOKEN=$PUSHOVER_TOKEN"
         run: python test_intraday_alert.py

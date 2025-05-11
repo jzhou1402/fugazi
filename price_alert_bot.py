@@ -1,8 +1,8 @@
 import os
-import json
 import yfinance as yf
 import requests
 import numpy as np
+from portfolio_utils import load_portfolio
 
 # === Load Pushover Credentials from Environment ===
 PUSHOVER_TOKEN = os.getenv("PUSHOVER_TOKEN")
@@ -29,7 +29,7 @@ def analyze_dip_intraday(ticker, lookback_days=5, interval="30m", threshold_mult
     """
     Fetches the last `lookback_days` of intraday data at `interval`,
     computes the avg absolute % move per interval, and if the most
-    recent interval’s drop exceeds threshold_multiplier×avg, fires alert.
+    recent interval's drop exceeds threshold_multiplier×avg, fires alert.
     """
     try:
         tk = yf.Ticker(ticker)
@@ -54,12 +54,6 @@ def analyze_dip_intraday(ticker, lookback_days=5, interval="30m", threshold_mult
 
     except Exception as e:
         print(f"Error processing {ticker}: {e}")
-
-def load_portfolio(path="portfolio.json"):
-    with open(path) as f:
-        data = json.load(f)
-    # allow either list of strings or list of dicts with "ticker"
-    return [s if isinstance(s, str) else s["ticker"] for s in data]
 
 if __name__ == "__main__":
     portfolio = load_portfolio()

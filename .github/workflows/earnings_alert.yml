@@ -27,4 +27,4 @@ jobs:
       env:
         PUSHOVER_TOKEN: ${{ secrets.PUSHOVER_TOKEN }}
         PUSHOVER_USER: ${{ secrets.PUSHOVER_USER }}
-      run: python price_alert_bot.py 
+      run: python earnings_release_alert_bot.py 

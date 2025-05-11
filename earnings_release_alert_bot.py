@@ -1,13 +1,37 @@
 import os
 import yfinance as yf
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
 from portfolio_utils import load_portfolio
 
 # === Load Pushover Credentials from Environment ===
 PUSHOVER_TOKEN = os.getenv("PUSHOVER_TOKEN")
 PUSHOVER_USER  = os.getenv("PUSHOVER_USER")
 
+def get_earnings_date(ticker):
+    """
+    Get the next earnings date for a ticker using yfinance.
+    Includes rate limiting and error handling.
+    """
+    try:
+        # Add a small delay to avoid rate limits
+        time.sleep(0.5)
+        
+        stock = yf.Ticker(ticker)
+        # Get earnings dates
+        earnings_dates = stock.earnings_dates
+        
+        if earnings_dates is None:
+            return None
+            
+        # Get the next earnings date (first row)
+        next_earnings = earnings_dates.index[0]
+        return next_earnings
+        
+    except Exception as e:
+        print(f"Error fetching earnings date for {ticker}: {e}")
+        return None
 
 def check_upcoming_earnings(ticker):
     """
@@ -15,16 +39,11 @@ def check_upcoming_earnings(ticker):
     and sends an alert if found.
     """
     try:
-        tk = yf.Ticker(ticker)
-        calendar = tk.calendar
+        earnings_date = get_earnings_date(ticker)
         
-        if calendar is None or calendar.empty:
+        if earnings_date is None:
             return
             
-        # Get the next earnings date
-        next_earnings = calendar.iloc[0]
-        earnings_date = next_earnings.name  # This is the date
-        
         # Calculate days until earnings
         days_until = (earnings_date - datetime.now()).days
         
@@ -43,7 +62,6 @@ def check_upcoming_earnings(ticker):
                 
     except Exception as e:
         print(f"Error checking earnings for {ticker}: {e}")
-
 
 if __name__ == "__main__":
     portfolio = load_portfolio()

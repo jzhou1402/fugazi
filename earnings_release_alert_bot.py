@@ -4,6 +4,7 @@ import requests
 from datetime import datetime, timedelta
 import time
 from portfolio_utils import load_portfolio
+import pytz
 
 # === Load Pushover Credentials from Environment ===
 PUSHOVER_TOKEN = os.getenv("PUSHOVER_TOKEN")
@@ -21,13 +22,29 @@ def get_earnings_date(ticker):
         stock = yf.Ticker(ticker)
         # Get earnings dates
         earnings_dates = stock.earnings_dates
-        
-        if earnings_dates is None:
+        if earnings_dates is None or len(earnings_dates) == 0:
             return None
             
-        # Get the next earnings date (first row)
-        next_earnings = earnings_dates.index[0]
-        return next_earnings
+        # Get current time in UTC
+        current_time = datetime.now(pytz.UTC)
+        
+        # Find the closest upcoming date
+        closest_future_date = None
+        min_days_until = float('inf')
+        
+        for date in earnings_dates.index:
+            # Convert to timezone-aware datetime if needed
+            if date.tzinfo is None:
+                date = pytz.UTC.localize(date)
+            
+            # Only consider future dates
+            if date > current_time:
+                days_until = (date - current_time).days
+                if days_until < min_days_until:
+                    min_days_until = days_until
+                    closest_future_date = date
+                
+        return closest_future_date
         
     except Exception as e:
         print(f"Error fetching earnings date for {ticker}: {e}")
@@ -44,8 +61,11 @@ def check_upcoming_earnings(ticker):
         if earnings_date is None:
             return
             
+        # Get current time in UTC
+        current_time = datetime.now(pytz.UTC)
+        
         # Calculate days until earnings
-        days_until = (earnings_date - datetime.now()).days
+        days_until = (earnings_date - current_time).days
         
         if days_until == 2:
             message = f"{ticker} earnings coming up in 2 days on {earnings_date.strftime('%Y-%m-%d')}"

@@ -1,4 +1,4 @@
-name: Test Intraday Dip Detector
+name: Test Market Drop Detector
 
 on:
   workflow_dispatch:
@@ -21,11 +21,11 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install yfinance requests numpy
+        run: pip install yfinance requests numpy pandas
 
       - name: Run test script
         env:
           PUSHOVER_USER:  ${{ secrets.PUSHOVER_USER }}
           PUSHOVER_TOKEN: ${{ secrets.PUSHOVER_TOKEN }}
           TEST_TICKERS:   ${{ github.event.inputs.test_tickers }} 
-        run: python test_intraday_alert.py
+        run: python test_dip_detector.py

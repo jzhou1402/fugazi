@@ -2,6 +2,8 @@ import os
 import yfinance as yf
 import requests
 import numpy as np
+import pandas as pd
+from datetime import datetime, timedelta
 from portfolio_utils import load_portfolio
 
 # === Load Pushover Credentials from Environment ===
@@ -12,12 +14,29 @@ if not PUSHOVER_TOKEN or not PUSHOVER_USER:
     raise RuntimeError("Missing Pushover credentials. "
                        "Please set PUSHOVER_TOKEN and PUSHOVER_USER environment variables.")
 
-def send_alert(ticker, pct_change, price):
-    message = f"{ticker} dropped {pct_change:.2f}% to ${price:.2f} in 30m (unusual dip)"
+def get_sp500_symbols():
+    """Get list of S&P 500 symbols"""
+    # Using Wikipedia's S&P 500 list
+    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    tables = pd.read_html(url)
+    df = tables[0]
+    return df['Symbol'].tolist()
+
+def send_alert(ticker, data):
+    """Send alert with detailed drop information"""
+    message = (
+        f"🚨 {ticker} dropped {data['pct_change']:.1f}% from day's high\n"
+        f"Current: ${data['current_price']:.2f}\n"
+        f"Day's High: ${data['day_high']:.2f}\n"
+        f"Volume: {data['volume']:,} (Avg: {data['avg_volume']:,})\n"
+        f"Sector: {data['sector']}\n"
+        f"Chart: https://finance.yahoo.com/quote/{ticker}"
+    )
+    
     payload = {
         "token":    PUSHOVER_TOKEN,
         "user":     PUSHOVER_USER,
-        "title":    f"🚨 {ticker} Intraday Dip",
+        "title":    f"📉 {ticker} Significant Drop",
         "message":  message,
         "priority": 1
     }
@@ -25,37 +44,60 @@ def send_alert(ticker, pct_change, price):
     if resp.status_code != 200:
         print(f"⚠️ Alert failed for {ticker}: {resp.status_code} {resp.text}")
 
-def analyze_dip_intraday(ticker, lookback_days=5, interval="30m", threshold_multiplier=2):
+def analyze_stock_drop(ticker, threshold=10.0):
     """
-    Fetches the last `lookback_days` of intraday data at `interval`,
-    computes the avg absolute % move per interval, and if the most
-    recent interval's drop exceeds threshold_multiplier×avg, fires alert.
+    Analyze if a stock has dropped significantly from its day's high
+    threshold: minimum percentage drop to trigger alert
     """
     try:
         tk = yf.Ticker(ticker)
-        hist = tk.history(period=f"{lookback_days}d", interval=interval)
-
+        
+        # Get intraday data for current day
+        hist = tk.history(period="1d", interval="5m")
         if len(hist) < 2:
-            print(f"Not enough data for {ticker}.")
+            print(f"Not enough data for {ticker}")
             return
 
-        # compute % change per bar
-        hist["pct_change"] = hist["Close"].pct_change() * 100
-        changes = hist["pct_change"].dropna()
+        # Get stock info for sector and volume data
+        info = tk.info
+        
+        # Calculate drop from day's high
+        day_high = hist['High'].max()
+        current_price = hist['Close'].iloc[-1]
+        pct_change = ((current_price - day_high) / day_high) * 100
+        
+        # Get volume data
+        current_volume = hist['Volume'].sum()  # Total volume for the day
+        avg_volume = info.get('averageVolume', 0)
+        
+        print(f"{ticker} — Drop from high: {abs(pct_change):.1f}% | Current: ${current_price:.2f}")
 
-        avg_move     = np.mean(np.abs(changes))
-        latest_change = changes.iloc[-1]
-        latest_price  = hist["Close"].iloc[-1]
-
-        print(f"{ticker} — Last 30m: {latest_change:.2f}%   |   Avg 30m move: {avg_move:.2f}%")
-
-        if latest_change < 0 and abs(latest_change) > threshold_multiplier * avg_move:
-            send_alert(ticker, latest_change, latest_price)
+        if pct_change < -threshold:
+            data = {
+                'pct_change': abs(pct_change),
+                'current_price': current_price,
+                'day_high': day_high,
+                'volume': current_volume,
+                'avg_volume': avg_volume,
+                'sector': info.get('sector', 'Unknown')
+            }
+            send_alert(ticker, data)
 
     except Exception as e:
         print(f"Error processing {ticker}: {e}")
 
 if __name__ == "__main__":
-    portfolio = load_portfolio()
-    for sym in portfolio:
-        analyze_dip_intraday(sym)
+    # Get S&P 500 symbols
+    sp500_symbols = get_sp500_symbols()
+    
+    # Get portfolio symbols
+    portfolio_symbols = load_portfolio()
+    
+    # Combine both sets of symbols, removing duplicates
+    all_symbols = set(sp500_symbols) | set(portfolio_symbols)
+    
+    print(f"Monitoring {len(all_symbols)} stocks ({len(sp500_symbols)} S&P 500 + {len(portfolio_symbols)} portfolio)")
+    
+    # Analyze each stock
+    for symbol in all_symbols:
+        analyze_stock_drop(symbol)

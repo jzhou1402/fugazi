@@ -1,10 +1,13 @@
-name: Intraday Dip Detector
+name: Market Drop Detector
 
 on:
   schedule:
-    # 30‑min runs between 9:30 AM and 4 PM EDT (13:30–20:00 UTC) Mon–Fri
-    - cron:  '30 13-19 * * 1-5'  # :30 past each hour from 13:30 → 19:30 UTC
-    - cron:  '0  14-20 * * 1-5'  # top of each hour from 14:00 → 20:00 UTC
+    # Morning check (10:30 AM ET / 14:30 UTC)
+    - cron: '30 14 * * 1-5'
+    # Midday check (2:00 PM ET / 18:00 UTC)
+    - cron: '0 18 * * 1-5'
+    # End of day check (4:30 PM ET / 20:30 UTC)
+    - cron: '30 20 * * 1-5'
 
 jobs:
   alert:
@@ -19,9 +22,9 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install yfinance requests numpy
+        run: pip install yfinance requests numpy pandas
 
-      - name: Run intraday dip detector
+      - name: Run market drop detector
         env:
           PUSHOVER_USER:   ${{ secrets.PUSHOVER_USER }}
           PUSHOVER_TOKEN:  ${{ secrets.PUSHOVER_TOKEN }}

@@ -28,6 +28,7 @@ def send_alert(ticker, data):
         f"🚨 {ticker} dropped {data['pct_change']:.1f}% from day's high\n"
         f"Current: ${data['current_price']:.2f}\n"
         f"Day's High: ${data['day_high']:.2f}\n"
+        f"Yesterday's Close: ${data['prev_close']:.2f} ({data['prev_close_pct']:+.1f}% from prev close)\n"
         f"Volume: {data['volume']:,} (Avg: {data['avg_volume']:,})\n"
         f"Sector: {data['sector']}\n"
         f"Chart: https://finance.yahoo.com/quote/{ticker}"
@@ -52,8 +53,8 @@ def analyze_stock_drop(ticker, threshold=10.0):
     try:
         tk = yf.Ticker(ticker)
         
-        # Get intraday data for current day
-        hist = tk.history(period="1d", interval="5m")
+        # Get intraday data for current day and previous day's close
+        hist = tk.history(period="2d", interval="5m")
         if len(hist) < 2:
             print(f"Not enough data for {ticker}")
             return
@@ -61,22 +62,28 @@ def analyze_stock_drop(ticker, threshold=10.0):
         # Get stock info for sector and volume data
         info = tk.info
         
-        # Calculate drop from day's high
+        # Calculate drops
         day_high = hist['High'].max()
         current_price = hist['Close'].iloc[-1]
-        pct_change = ((current_price - day_high) / day_high) * 100
+        prev_close = hist['Close'].iloc[0]  # First close of the 2-day period
+        
+        # Calculate percentage changes
+        drop_from_high = ((current_price - day_high) / day_high) * 100
+        change_from_prev = ((current_price - prev_close) / prev_close) * 100
         
         # Get volume data
-        current_volume = hist['Volume'].sum()  # Total volume for the day
+        current_volume = hist['Volume'].sum()
         avg_volume = info.get('averageVolume', 0)
         
-        print(f"{ticker} — Drop from high: {abs(pct_change):.1f}% | Current: ${current_price:.2f}")
+        print(f"{ticker} — Drop from high: {abs(drop_from_high):.1f}% | Current: ${current_price:.2f}")
 
-        if pct_change < -threshold:
+        if drop_from_high < -threshold:
             data = {
-                'pct_change': abs(pct_change),
+                'pct_change': abs(drop_from_high),
                 'current_price': current_price,
                 'day_high': day_high,
+                'prev_close': prev_close,
+                'prev_close_pct': change_from_prev,
                 'volume': current_volume,
                 'avg_volume': avg_volume,
                 'sector': info.get('sector', 'Unknown')

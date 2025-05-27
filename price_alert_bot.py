@@ -25,9 +25,10 @@ def get_sp500_symbols():
 def send_alert(ticker, data):
     """Send alert with detailed drop information"""
     message = (
-        f"🚨 {ticker} dropped {data['pct_change']:.1f}% from day's high\n"
+        f"🚨 {ticker} dropped {data['max_drop']:.1f}% from peak\n"
         f"Current: ${data['current_price']:.2f}\n"
-        f"Day's High: ${data['day_high']:.2f}\n"
+        f"Peak Price: ${data['peak_price']:.2f}\n"
+        f"Drop Start: {data['drop_start_time']}\n"
         f"Yesterday's Close: ${data['prev_close']:.2f} ({data['prev_close_pct']:+.1f}% from prev close)\n"
         f"Volume: {data['volume']:,} (Avg: {data['avg_volume']:,})\n"
         f"Sector: {data['sector']}\n"
@@ -47,7 +48,7 @@ def send_alert(ticker, data):
 
 def analyze_stock_drop(ticker, threshold=5.0):
     """
-    Analyze if a stock has dropped significantly from its day's high
+    Analyze if a stock has dropped significantly from its peak
     threshold: minimum percentage drop to trigger alert
     """
     try:
@@ -69,25 +70,44 @@ def analyze_stock_drop(ticker, threshold=5.0):
         # Get stock info for sector and volume data
         info = tk.info
         
-        # Calculate drops
-        day_high = today['High'].max()
+        # Calculate maximum drop
         current_price = today['Close'].iloc[-1]
         
-        # Calculate percentage changes
-        drop_from_high = ((current_price - day_high) / day_high) * 100
+        # Include yesterday's close in the analysis
+        all_prices = pd.concat([
+            pd.Series([prev_close], index=[today.index[0] - pd.Timedelta(minutes=5)]),
+            today['High'],
+            today['Low']
+        ]).sort_index()
+        
+        # Calculate rolling maximum and drops
+        rolling_max = all_prices.expanding().max()
+        drops = ((all_prices - rolling_max) / rolling_max) * 100
+        
+        # Find the maximum drop
+        max_drop_idx = drops.idxmin()
+        max_drop = drops.min()
+        peak_price = rolling_max[max_drop_idx]
+        
+        # Find when the peak occurred
+        peak_idx = all_prices[all_prices == peak_price].index[0]
+        drop_start_time = peak_idx.strftime('%H:%M')
+        
+        # Calculate change from previous close
         change_from_prev = ((current_price - prev_close) / prev_close) * 100
         
         # Get volume data
         current_volume = today['Volume'].sum()
         avg_volume = info.get('averageVolume', 0)
         
-        print(f"{ticker} — Drop from high: {abs(drop_from_high):.1f}% | Current: ${current_price:.2f}")
+        print(f"{ticker} — Max Drop: {abs(max_drop):.1f}% | Current: ${current_price:.2f}")
 
-        if drop_from_high < -threshold:
+        if max_drop < -threshold:
             data = {
-                'pct_change': abs(drop_from_high),
+                'max_drop': abs(max_drop),
                 'current_price': current_price,
-                'day_high': day_high,
+                'peak_price': peak_price,
+                'drop_start_time': drop_start_time,
                 'prev_close': prev_close,
                 'prev_close_pct': change_from_prev,
                 'volume': current_volume,

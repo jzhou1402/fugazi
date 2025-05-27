@@ -16,9 +16,10 @@ if not PUSHOVER_TOKEN or not PUSHOVER_USER:
 def send_test_alert(ticker, data):
     """Send test alert with detailed drop information"""
     message = (
-        f"🚨 TEST ALERT: {ticker} dropped {data['pct_change']:.1f}% from day's high\n"
+        f"🚨 TEST ALERT: {ticker} dropped {data['max_drop']:.1f}% from peak\n"
         f"Current: ${data['current_price']:.2f}\n"
-        f"Day's High: ${data['day_high']:.2f}\n"
+        f"Peak Price: ${data['peak_price']:.2f}\n"
+        f"Drop Start: {data['drop_start_time']}\n"
         f"Yesterday's Close: ${data['prev_close']:.2f} ({data['prev_close_pct']:+.1f}% from prev close)\n"
         f"Volume: {data['volume']:,} (Avg: {data['avg_volume']:,})\n"
         f"Sector: {data['sector']}\n"
@@ -40,7 +41,7 @@ def send_test_alert(ticker, data):
 def test_dip_detector(ticker, threshold=5.0):
     """
     Tests the dip detector for a single ticker.
-    Checks if the stock has dropped significantly from its day's high.
+    Checks for the maximum drop between any two points in the day.
     """
     print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M')}] Testing {ticker}")
     
@@ -63,31 +64,50 @@ def test_dip_detector(ticker, threshold=5.0):
         # Get stock info for sector and volume data
         info = tk.info
         
-        # Calculate drops
-        day_high = today['High'].max()
+        # Calculate maximum drop
         current_price = today['Close'].iloc[-1]
         
-        # Calculate percentage changes
-        drop_from_high = ((current_price - day_high) / day_high) * 100
+        # Include yesterday's close in the analysis
+        all_prices = pd.concat([
+            pd.Series([prev_close], index=[today.index[0] - pd.Timedelta(minutes=5)]),
+            today['High'],
+            today['Low']
+        ]).sort_index()
+        
+        # Calculate rolling maximum and drops
+        rolling_max = all_prices.expanding().max()
+        drops = ((all_prices - rolling_max) / rolling_max) * 100
+        
+        # Find the maximum drop
+        max_drop_idx = drops.idxmin()
+        max_drop = drops.min()
+        peak_price = rolling_max[max_drop_idx]
+        
+        # Find when the peak occurred
+        peak_idx = all_prices[all_prices == peak_price].index[0]
+        drop_start_time = peak_idx.strftime('%H:%M')
+        
+        # Calculate change from previous close
         change_from_prev = ((current_price - prev_close) / prev_close) * 100
         
         # Get volume data
         current_volume = today['Volume'].sum()
         avg_volume = info.get('averageVolume', 0)
         
-        print(f"  Day's High: ${day_high:.2f}")
-        print(f"  Current: ${current_price:.2f}")
         print(f"  Yesterday's Close: ${prev_close:.2f}")
-        print(f"  Drop from high: {abs(drop_from_high):.1f}%")
+        print(f"  Peak Price: ${peak_price:.2f} at {drop_start_time}")
+        print(f"  Current: ${current_price:.2f}")
+        print(f"  Maximum Drop: {abs(max_drop):.1f}%")
         print(f"  Change from prev close: {change_from_prev:+.1f}%")
         print(f"  Volume: {current_volume:,} (Avg: {avg_volume:,})")
 
-        if drop_from_high < -threshold:
-            print("  → Triggering test alert via Pushover!")
+        if max_drop < -threshold:
+            print("  → Triggering alert!")
             data = {
-                'pct_change': abs(drop_from_high),
+                'max_drop': abs(max_drop),
                 'current_price': current_price,
-                'day_high': day_high,
+                'peak_price': peak_price,
+                'drop_start_time': drop_start_time,
                 'prev_close': prev_close,
                 'prev_close_pct': change_from_prev,
                 'volume': current_volume,

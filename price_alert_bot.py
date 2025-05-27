@@ -45,7 +45,7 @@ def send_alert(ticker, data):
     if resp.status_code != 200:
         print(f"⚠️ Alert failed for {ticker}: {resp.status_code} {resp.text}")
 
-def analyze_stock_drop(ticker, threshold=10.0):
+def analyze_stock_drop(ticker, threshold=5.0):
     """
     Analyze if a stock has dropped significantly from its day's high
     threshold: minimum percentage drop to trigger alert
@@ -53,26 +53,32 @@ def analyze_stock_drop(ticker, threshold=10.0):
     try:
         tk = yf.Ticker(ticker)
         
-        # Get intraday data for current day and previous day's close
-        hist = tk.history(period="2d", interval="5m")
-        if len(hist) < 2:
-            print(f"Not enough data for {ticker}")
+        # Get yesterday's close
+        prev_day = tk.history(period="2d", interval="1d")
+        if len(prev_day) < 2:
+            print(f"Not enough data for previous day for {ticker}")
+            return
+        prev_close = prev_day['Close'].iloc[0]
+        
+        # Get today's intraday data
+        today = tk.history(period="1d", interval="5m")
+        if len(today) < 2:
+            print(f"Not enough data for today for {ticker}")
             return
 
         # Get stock info for sector and volume data
         info = tk.info
         
         # Calculate drops
-        day_high = hist['High'].max()
-        current_price = hist['Close'].iloc[-1]
-        prev_close = hist['Close'].iloc[0]  # First close of the 2-day period
+        day_high = today['High'].max()
+        current_price = today['Close'].iloc[-1]
         
         # Calculate percentage changes
         drop_from_high = ((current_price - day_high) / day_high) * 100
         change_from_prev = ((current_price - prev_close) / prev_close) * 100
         
         # Get volume data
-        current_volume = hist['Volume'].sum()
+        current_volume = today['Volume'].sum()
         avg_volume = info.get('averageVolume', 0)
         
         print(f"{ticker} — Drop from high: {abs(drop_from_high):.1f}% | Current: ${current_price:.2f}")

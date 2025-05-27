@@ -22,7 +22,7 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install yfinance requests numpy pandas lxml
+        run: pip install yfinance requests numpy pandas lxml python-dotenv
 
       - name: Run market drop detector
         env:

@@ -39,20 +39,22 @@ def analyze_stock_data(ticker, threshold=5.0):
     - drop_to_time: Ending time of the maximum drop
     - current_price: Current price of the stock
     """
+    print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M')}] Analyzing {ticker}")
+    
     # Get the data
     tk = yf.Ticker(ticker)
     
     # Get yesterday's close
     prev_day = tk.history(period="2d", interval="1d")
     if len(prev_day) < 2:
-        print("  Not enough data for previous day.")
+        print(f"  ❌ {ticker}: Not enough data for previous day.")
         return None
     prev_close = prev_day['Close'].iloc[0]
     
     # Get today's intraday data
     today = tk.history(period="1d", interval="5m")
     if len(today) < 2:
-        print("  Not enough data for today.")
+        print(f"  ❌ {ticker}: Not enough data for today.")
         return None
 
     # Calculate maximum drop
@@ -129,7 +131,7 @@ class AlertTracker:
                            for ticker, (time, price) in data.items()}
             return {}
         except Exception as e:
-            print(f"Error loading alert history: {e}")
+            print(f"❌ Error loading alert history: {e}")
             return {}
     
     def _save_alerts(self):
@@ -141,36 +143,34 @@ class AlertTracker:
             with open(self.alert_file, 'w') as f:
                 json.dump(data, f)
         except Exception as e:
-            print(f"Error saving alert history: {e}")
+            print(f"❌ Error saving alert history: {e}")
     
     def should_alert(self, ticker, current_price, threshold):
         """Check if we should send an alert for this ticker"""
         if ticker not in self.alerts:
+            print(f"  ✓ {ticker}: No previous alerts, will send if threshold met")
             return True
         
         last_time, last_price = self.alerts[ticker]
         # If it's a new day, reset the tracking
         if last_time.date() != datetime.now().date():
+            print(f"  ✓ {ticker}: New day, will send if threshold met")
             return True
         
         # Calculate new drop from last alert price
         new_drop = ((last_price - current_price) / last_price) * 100
-        return new_drop >= threshold
+        should_alert = new_drop >= threshold
+        if should_alert:
+            print(f"  ✓ {ticker}: New drop of {new_drop:.1f}% from last alert price ${last_price:.2f}")
+        else:
+            print(f"  ⚠️ {ticker}: Drop of {new_drop:.1f}% from last alert price ${last_price:.2f} below threshold")
+        return should_alert
     
     def record_alert(self, ticker, current_price):
         """Record that we sent an alert for this ticker"""
         self.alerts[ticker] = (datetime.now(), current_price)
         self._save_alerts()  # Save after each new alert
-    
-    def clear_history(self):
-        """Clear all alert history"""
-        self.alerts = {}
-        try:
-            if os.path.exists(self.alert_file):
-                os.remove(self.alert_file)
-            print("Alert history cleared.")
-        except Exception as e:
-            print(f"Error clearing alert history: {e}")
+        print(f"  ✓ {ticker}: Alert recorded at ${current_price:.2f}")
 
 # Create a global alert tracker
 alert_tracker = AlertTracker()
@@ -180,14 +180,25 @@ def analyze_stock_drop(ticker, threshold=5.0):
     Analyzes stock data and sends an alert if a significant drop is detected.
     Only sends a new alert if the price has dropped by the threshold amount again.
     """
-    # Analyze the stock data
-    drop_data = analyze_stock_data(ticker, threshold)
-    
-    # If a significant drop was detected, check if we should alert
-    if drop_data and drop_data['max_drop_pct'] > threshold:
-        if alert_tracker.should_alert(ticker, drop_data['current_price'], threshold):
-            send_alert(ticker, drop_data)
-            alert_tracker.record_alert(ticker, drop_data['current_price'])
+    try:
+        # Analyze the stock data
+        drop_data = analyze_stock_data(ticker, threshold)
+        
+        # If a significant drop was detected, check if we should alert
+        if drop_data and drop_data['max_drop_pct'] > threshold:
+            print(f"  📊 {ticker}: Detected drop of {drop_data['max_drop_pct']:.1f}%")
+            if alert_tracker.should_alert(ticker, drop_data['current_price'], threshold):
+                send_alert(ticker, drop_data)
+                alert_tracker.record_alert(ticker, drop_data['current_price'])
+            else:
+                print(f"  ⚠️ {ticker}: Drop detected but no alert sent (already alerted)")
+        elif drop_data:
+            print(f"  ℹ️ {ticker}: Maximum drop of {drop_data['max_drop_pct']:.1f}% below threshold")
+        else:
+            print(f"  ℹ️ {ticker}: No valid data for analysis")
+            
+    except Exception as e:
+        print(f"  ❌ {ticker}: Error during analysis: {e}")
 
 # ─── Alert Functions ───────────────────────────────────────────────────
 def send_alert(ticker, data):
@@ -210,7 +221,9 @@ def send_alert(ticker, data):
     }
     resp = requests.post("https://api.pushover.net/1/messages.json", data=payload)
     if resp.status_code != 200:
-        print(f"❌ Failed to send alert: {resp.status_code} {resp.text}")
+        print(f"  ❌ {ticker}: Failed to send alert: {resp.status_code} {resp.text}")
+    else:
+        print(f"  ✓ {ticker}: Alert sent successfully")
 
 # ─── Main Entry ─────────────────────────────────────────────────────────
 if __name__ == "__main__":

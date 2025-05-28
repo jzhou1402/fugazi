@@ -6,6 +6,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from portfolio_utils import load_portfolio
+import json
 
 # ─── Load Environment Variables ──────────────────────────────────────────
 load_dotenv()  # Load environment variables from .env file
@@ -111,16 +112,82 @@ def analyze_stock_data(ticker, threshold=5.0):
         'current_price': current_price
     }
 
+# ─── Alert Tracking ───────────────────────────────────────────────────
+class AlertTracker:
+    def __init__(self):
+        self.alert_file = "alert_history.json"
+        self.alerts = self._load_alerts()
+    
+    def _load_alerts(self):
+        """Load alert history from JSON file"""
+        try:
+            if os.path.exists(self.alert_file):
+                with open(self.alert_file, 'r') as f:
+                    data = json.load(f)
+                    # Convert string dates back to datetime objects
+                    return {ticker: (datetime.fromisoformat(time), price) 
+                           for ticker, (time, price) in data.items()}
+            return {}
+        except Exception as e:
+            print(f"Error loading alert history: {e}")
+            return {}
+    
+    def _save_alerts(self):
+        """Save alert history to JSON file"""
+        try:
+            # Convert datetime objects to ISO format strings for JSON serialization
+            data = {ticker: (time.isoformat(), price) 
+                   for ticker, (time, price) in self.alerts.items()}
+            with open(self.alert_file, 'w') as f:
+                json.dump(data, f)
+        except Exception as e:
+            print(f"Error saving alert history: {e}")
+    
+    def should_alert(self, ticker, current_price, threshold):
+        """Check if we should send an alert for this ticker"""
+        if ticker not in self.alerts:
+            return True
+        
+        last_time, last_price = self.alerts[ticker]
+        # If it's a new day, reset the tracking
+        if last_time.date() != datetime.now().date():
+            return True
+        
+        # Calculate new drop from last alert price
+        new_drop = ((last_price - current_price) / last_price) * 100
+        return new_drop >= threshold
+    
+    def record_alert(self, ticker, current_price):
+        """Record that we sent an alert for this ticker"""
+        self.alerts[ticker] = (datetime.now(), current_price)
+        self._save_alerts()  # Save after each new alert
+    
+    def clear_history(self):
+        """Clear all alert history"""
+        self.alerts = {}
+        try:
+            if os.path.exists(self.alert_file):
+                os.remove(self.alert_file)
+            print("Alert history cleared.")
+        except Exception as e:
+            print(f"Error clearing alert history: {e}")
+
+# Create a global alert tracker
+alert_tracker = AlertTracker()
+
 def analyze_stock_drop(ticker, threshold=5.0):
     """
     Analyzes stock data and sends an alert if a significant drop is detected.
+    Only sends a new alert if the price has dropped by the threshold amount again.
     """
     # Analyze the stock data
     drop_data = analyze_stock_data(ticker, threshold)
     
-    # If a significant drop was detected, send an alert
+    # If a significant drop was detected, check if we should alert
     if drop_data and drop_data['max_drop_pct'] > threshold:
-        send_alert(ticker, drop_data)
+        if alert_tracker.should_alert(ticker, drop_data['current_price'], threshold):
+            send_alert(ticker, drop_data)
+            alert_tracker.record_alert(ticker, drop_data['current_price'])
 
 # ─── Alert Functions ───────────────────────────────────────────────────
 def send_alert(ticker, data):

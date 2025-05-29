@@ -175,7 +175,7 @@ class AlertTracker:
 # Create a global alert tracker
 alert_tracker = AlertTracker()
 
-def analyze_stock_drop(ticker, threshold=5.0):
+def analyze_stock_drop(ticker, threshold=10.0):
     """
     Analyzes stock data and sends an alert if a significant drop is detected.
     Only sends a new alert if the price has dropped by the threshold amount again.
